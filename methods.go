@@ -40,7 +40,7 @@ func (c *Client) Exec(ctx context.Context, sql Sqlizer) (*pgconn.CommandTag, err
 
 // Select executes a query and scans multiple rows into dest.
 // Uses transaction if present in context.
-func (c *Client) Select(ctx context.Context, dest any, sql Sqlizer) error {
+func (c *Client) Select(ctx context.Context, sql Sqlizer, dest any) error {
 	query, args, err := sql.ToSql()
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (c *Client) Select(ctx context.Context, dest any, sql Sqlizer) error {
 
 // Get executes a query and scans a single row into dest.
 // Uses transaction if present in context.
-func (c *Client) Get(ctx context.Context, dest any, sql Sqlizer) error {
+func (c *Client) Get(ctx context.Context, sql Sqlizer, dest any) error {
 	query, args, err := sql.ToSql()
 	if err != nil {
 		return err
