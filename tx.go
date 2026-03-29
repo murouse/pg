@@ -1,0 +1,155 @@
+package pg
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/jackc/pgx/v5"
+)
+
+// txContextKey is used to store transaction in context.
+type txContextKey struct{}
+
+// nestedTxContextKey marks nested transaction (no-op).
+type nestedTxContextKey struct{}
+
+// txWrapper wraps pgx.Tx to allow interface abstraction.
+type txWrapper struct {
+	pgx.Tx
+}
+
+// TxController defines transaction lifecycle operations.
+type TxController interface {
+	BeginTx(ctx context.Context, opts ...TxOption) (context.Context, error)
+	CommitTx(ctx context.Context) error
+	RollbackTx(ctx context.Context) error
+}
+
+// TxOption configures transaction options.
+type TxOption func(o *txOptions)
+
+// txOptions wraps pgx.TxOptions.
+type txOptions struct {
+	pgx.TxOptions
+}
+
+// WithIsolationLevel sets transaction isolation level.
+func WithIsolationLevel(isoLevel pgx.TxIsoLevel) TxOption {
+	return func(o *txOptions) {
+		o.IsoLevel = isoLevel
+	}
+}
+
+// WithAccessMode sets transaction access mode.
+func WithAccessMode(accessMode pgx.TxAccessMode) TxOption {
+	return func(o *txOptions) {
+		o.AccessMode = accessMode
+	}
+}
+
+// WithDeferrableMode sets transaction deferrable mode.
+func WithDeferrableMode(deferrableMode pgx.TxDeferrableMode) TxOption {
+	return func(o *txOptions) {
+		o.DeferrableMode = deferrableMode
+	}
+}
+
+// BeginTx starts a new transaction or marks nested transaction.
+// Stores transaction in context.
+func (c *Client) BeginTx(ctx context.Context, opts ...TxOption) (context.Context, error) {
+	// если транзакция уже есть
+	if _, ok := extractTx(ctx); ok {
+		// добавляем флаг вложенности
+		return context.WithValue(ctx, nestedTxContextKey{}, struct{}{}), nil
+	}
+
+	txOpts := txOptions{}
+	for _, opt := range opts {
+		opt(&txOpts)
+	}
+
+	// иначе создаем транзакцию
+	tx, err := c.pool.BeginTx(ctx, txOpts.TxOptions)
+	if err != nil {
+		return nil, fmt.Errorf("begin: %w", err)
+	}
+
+	return context.WithValue(ctx, txContextKey{}, &txWrapper{tx}), nil
+}
+
+// CommitTx commits transaction if not nested.
+func (c *Client) CommitTx(ctx context.Context) error {
+	// если нет транзакции, ошибка
+	tx, ok := extractTx(ctx)
+	if !ok {
+		return fmt.Errorf("not a transaction")
+	}
+
+	// если вложенная транзакция, ничего не делаем
+	if _, nested := ctx.Value(nestedTxContextKey{}).(struct{}); nested {
+		return nil
+	}
+
+	// иначе коммитим
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+// RollbackTx rolls back transaction if not nested.
+func (c *Client) RollbackTx(ctx context.Context) error {
+	// если нет транзакции, ошибка
+	tx, ok := extractTx(ctx)
+	if !ok {
+		return fmt.Errorf("not a transaction")
+	}
+
+	// если вложенная транзакция, ничего не делаем
+	if _, nested := ctx.Value(nestedTxContextKey{}).(struct{}); nested {
+		return nil
+	}
+
+	// иначе роллбэчим
+	if err := tx.Rollback(ctx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+		return fmt.Errorf("rollback: %w", err)
+	}
+
+	return nil
+}
+
+// InTx executes handler within transaction.
+// Handles begin/commit/rollback automatically.
+// Nested transactions are treated as no-op.
+func InTx(ctx context.Context, tc TxController, handler func(context.Context) error) error {
+	ctx, err := tc.BeginTx(ctx)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+
+	defer func() {
+		rbErr := tc.RollbackTx(ctx)
+		if rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			slog.Error("rollback transaction", "error", rbErr)
+		}
+	}()
+
+	if err = handler(ctx); err != nil {
+		return fmt.Errorf("handler transaction: %w", err)
+	}
+
+	if err = tc.CommitTx(ctx); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// extractTx extracts transaction from context.
+func extractTx(ctx context.Context) (*txWrapper, bool) {
+	tx, ok := ctx.Value(txContextKey{}).(*txWrapper)
+	return tx, ok
+}
