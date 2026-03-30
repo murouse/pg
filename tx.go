@@ -124,25 +124,33 @@ func (c *Client) RollbackTx(ctx context.Context) error {
 // InTx executes handler within transaction.
 // Handles begin/commit/rollback automatically.
 // Nested transactions are treated as no-op.
-func InTx(ctx context.Context, tc TxController, handler func(context.Context) error) error {
-	ctx, err := tc.BeginTx(ctx)
+func InTx(ctx context.Context, tc TxController, handler func(context.Context) error) (err error) {
+	ctx, err = tc.BeginTx(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
 	}
 
 	defer func() {
-		rbErr := tc.RollbackTx(ctx)
-		if rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			slog.Error("rollback transaction", "error", rbErr)
+		if p := recover(); p != nil {
+			if rbErr := tc.RollbackTx(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+				slog.Error("rollback tx panic", "error", rbErr)
+			}
+			panic(p)
+		}
+
+		if err != nil {
+			if rbErr := tc.RollbackTx(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+				slog.Error("rollback tx", "error", rbErr)
+			}
 		}
 	}()
 
 	if err = handler(ctx); err != nil {
-		return fmt.Errorf("handler transaction: %w", err)
+		return fmt.Errorf("handler tx: %w", err)
 	}
 
 	if err = tc.CommitTx(ctx); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
+		return fmt.Errorf("commit tx: %w", err)
 	}
 
 	return nil

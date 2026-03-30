@@ -19,10 +19,10 @@ type executor interface {
 
 // Exec executes a query (INSERT/UPDATE/DELETE).
 // Uses transaction if present in context.
-func (c *Client) Exec(ctx context.Context, sql Sqlizer) (*pgconn.CommandTag, error) {
+func (c *Client) Exec(ctx context.Context, sql Sqlizer) (pgconn.CommandTag, error) {
 	query, args, err := sql.ToSql()
 	if err != nil {
-		return nil, err
+		return pgconn.CommandTag{}, err
 	}
 
 	ex := executor(c.pool)
@@ -32,10 +32,10 @@ func (c *Client) Exec(ctx context.Context, sql Sqlizer) (*pgconn.CommandTag, err
 
 	tag, err := ex.Exec(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return pgconn.CommandTag{}, err
 	}
 
-	return &tag, nil
+	return tag, nil
 }
 
 // Select executes a query and scans multiple rows into dest.
