@@ -133,14 +133,14 @@ func InTx(ctx context.Context, tc TxController, handler func(context.Context) er
 	defer func() {
 		if p := recover(); p != nil {
 			if rbErr := tc.RollbackTx(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-				slog.Error("rollback tx panic", "error", rbErr)
+				slog.ErrorContext(ctx, "rollback tx panic", "error", rbErr)
 			}
 			panic(p)
 		}
 
 		if err != nil {
 			if rbErr := tc.RollbackTx(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-				slog.Error("rollback tx", "error", rbErr)
+				slog.ErrorContext(ctx, "rollback tx", "error", rbErr)
 			}
 		}
 	}()
@@ -154,6 +154,18 @@ func InTx(ctx context.Context, tc TxController, handler func(context.Context) er
 	}
 
 	return nil
+}
+
+// GetInTx is a generic version of InTx that returns a value from handler.
+// All transaction semantics (commit/rollback/panic handling) are identical to InTx.
+func GetInTx[T any](ctx context.Context, tc TxController, handler func(context.Context) (T, error)) (T, error) {
+	var res T
+	err := InTx(ctx, tc, func(ctx context.Context) error {
+		var innerErr error
+		res, innerErr = handler(ctx)
+		return innerErr
+	})
+	return res, err
 }
 
 // extractTx extracts transaction from context.
