@@ -1,6 +1,11 @@
 package pg
 
-import sq "github.com/Masterminds/squirrel"
+import (
+	sq "github.com/Masterminds/squirrel"
+	"github.com/doug-martin/goqu/v9"
+	_ "github.com/doug-martin/goqu/v9/dialect/postgres" // register postgres dialect for goqu
+	goquexp "github.com/doug-martin/goqu/v9/exp"
+)
 
 // Sq returns squirrel statement builder configured for PostgreSQL ($ placeholders).
 func Sq() sq.StatementBuilderType {
@@ -24,4 +29,34 @@ func Sql(query string, args ...interface{}) *SqlQuery {
 		query: query,
 		args:  args,
 	}
+}
+
+// GoQuWrapper is an adapter that makes goqu expressions compatible with squirrel.Sqlizer.
+//
+// Reason:
+// - goqu uses ToSQL()
+// - squirrel expects ToSql()
+// This bridges the API mismatch between the two libraries.
+type GoQuWrapper struct {
+	goquexp.SQLExpression
+}
+
+// ToSql adapts goqu's ToSQL method to match squirrel's Sqlizer interface.
+func (w *GoQuWrapper) ToSql() (string, []any, error) {
+	return w.ToSQL()
+}
+
+// GoQu wraps a goqu expression into a Sqlizer-compatible type.
+//
+// Usage:
+//
+//	c.Exec(ctx, GoQu(GoQuDialect().Select(...)))
+func GoQu(expr goquexp.SQLExpression) *GoQuWrapper {
+	return &GoQuWrapper{expr}
+}
+
+// GoQuDialect returns a PostgreSQL dialect for goqu.
+// Extracted into a helper for consistency and convenience.
+func GoQuDialect() goqu.DialectWrapper {
+	return goqu.Dialect("postgres")
 }
