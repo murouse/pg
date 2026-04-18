@@ -124,8 +124,8 @@ func (c *Client) RollbackTx(ctx context.Context) error {
 // InTx executes handler within transaction.
 // Handles begin/commit/rollback automatically.
 // Nested transactions are treated as no-op.
-func InTx(ctx context.Context, tc TxController, handler func(context.Context) error) (err error) {
-	ctx, err = tc.BeginTx(ctx)
+func InTx(ctx context.Context, tc TxController, handler func(context.Context) error, opts ...TxOption) (err error) {
+	ctx, err = tc.BeginTx(ctx, opts...)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
@@ -158,13 +158,13 @@ func InTx(ctx context.Context, tc TxController, handler func(context.Context) er
 
 // GetInTx is a generic version of InTx that returns a value from handler.
 // All transaction semantics (commit/rollback/panic handling) are identical to InTx.
-func GetInTx[T any](ctx context.Context, tc TxController, handler func(context.Context) (T, error)) (T, error) {
+func GetInTx[T any](ctx context.Context, tc TxController, handler func(context.Context) (T, error), opts ...TxOption) (T, error) {
 	var res T
 	err := InTx(ctx, tc, func(ctx context.Context) error {
 		var innerErr error
 		res, innerErr = handler(ctx)
 		return innerErr
-	})
+	}, opts...)
 	return res, err
 }
 
