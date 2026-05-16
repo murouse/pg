@@ -1,4 +1,4 @@
-package pg
+package pgo
 
 // Logger defines minimal logging interface used by the client.
 type Logger interface {

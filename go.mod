@@ -1,4 +1,4 @@
-module github.com/murouse/pg
+module github.com/murouse/pgo
 
 go 1.25.6
 

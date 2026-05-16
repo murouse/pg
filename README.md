@@ -1,4 +1,4 @@
-# pg
+# pgo
 
 Lightweight PostgreSQL client built on top of `pgx`, providing:
 
@@ -12,7 +12,7 @@ Lightweight PostgreSQL client built on top of `pgx`, providing:
 ## Installation
 
 ```bash
-go get github.com/murouse/pg
+go get github.com/murouse/pgo
 ```
 
 ---
@@ -33,8 +33,8 @@ go get github.com/murouse/pg
 ```go
 ctx := context.Background()
 
-client, err := pg.New(ctx,
-    pg.WithConnString("postgres://user:pass@localhost:5432/db?sslmode=disable"),
+client, err := pgo.New(ctx,
+    pgo.WithConnString("postgres://user:pass@localhost:5432/db?sslmode=disable"),
 )
 if err != nil {
     log.Fatal(err)
@@ -49,13 +49,13 @@ defer client.Close()
 ### Using connection string
 
 ```go
-pg.WithConnString("postgres://user:pass@localhost:5432/db?sslmode=disable")
+pgo.WithConnString("postgres://user:pass@localhost:5432/db?sslmode=disable")
 ```
 
 ### Using credentials
 
 ```go
-pg.WithCreds(&pg.Creds{
+pgo.WithCreds(&pgo.Creds{
     User: "user",
     Pass: "pass",
     Host: "localhost",
@@ -68,7 +68,7 @@ pg.WithCreds(&pg.Creds{
 ### Custom pool config
 
 ```go
-pg.WithPoolConfig(&pg.PoolConfig{
+pgo.WithPoolConfig(&pgo.PoolConfig{
     MaxConns: 10,
 })
 ```
@@ -81,7 +81,7 @@ pg.WithPoolConfig(&pg.PoolConfig{
 
 ```go
 _, err := client.Exec(ctx,
-    pg.Sql("INSERT INTO users(name) VALUES($1)", "john"),
+    pgo.Sql("INSERT INTO users(name) VALUES($1)", "john"),
 )
 ```
 
@@ -91,7 +91,7 @@ _, err := client.Exec(ctx,
 var user User
 
 err := client.Get(ctx, &user,
-    pg.Sql("SELECT * FROM users WHERE id = $1", 1),
+    pgo.Sql("SELECT * FROM users WHERE id = $1", 1),
 )
 ```
 
@@ -101,7 +101,7 @@ err := client.Get(ctx, &user,
 var users []User
 
 err := client.Select(ctx, &users,
-    pg.Sql("SELECT * FROM users"),
+    pgo.Sql("SELECT * FROM users"),
 )
 ```
 
@@ -110,7 +110,7 @@ err := client.Select(ctx, &users,
 ## Using with squirrel
 
 ```go
-query := pg.Sq().
+query := pgo.Sq().
     Select("id", "name").
     From("users").
     Where(sq.Eq{"id": 1})
@@ -125,9 +125,9 @@ err := client.Get(ctx, &user, query)
 ### Basic usage
 
 ```go
-err := pg.InTx(ctx, client, func(ctx context.Context) error {
+err := pgo.InTx(ctx, client, func(ctx context.Context) error {
     if _, err := client.Exec(ctx,
-        pg.Sql("INSERT INTO users(name) VALUES($1)", "john"),
+        pgo.Sql("INSERT INTO users(name) VALUES($1)", "john"),
     ); err != nil {
         return err
     }
@@ -143,8 +143,8 @@ err := pg.InTx(ctx, client, func(ctx context.Context) error {
 Nested transactions are **no-op**:
 
 ```go
-pg.InTx(ctx, client, func(ctx context.Context) error {
-    return pg.InTx(ctx, client, func(ctx context.Context) error {
+pgo.InTx(ctx, client, func(ctx context.Context) error {
+    return pgo.InTx(ctx, client, func(ctx context.Context) error {
         // executed in the same transaction
         return nil
     })
